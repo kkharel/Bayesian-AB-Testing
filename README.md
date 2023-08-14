@@ -137,3 +137,31 @@ has a higher conversion rate than A, as the 95% HDI is well above 0. The decisio
 In practice, we are also interested in how much better is variant B than A?
 
 For the model with strong prior, the prior is effectively pulling the relative uplift distribution closer to zero, so our central estimate of relative uplift is conservative( understated). We would need much more data for our inference to get closer to true relative uplift of 8%
+
+# Use Case: n-Variant
+
+ WHen we have more than two variants that we want to test simultaneously. We want to determine if any of these variants outperforms the others, 
+ 
+ To achieve this, we explore two different methods
+
+## Method 1: Compare to Control (Variant A)
+
+In this method, we select one variant as the "control" variant which is a reference point. We then compare the performance of the other variants against this control variant, one at a time. The idea is to assess whether any of the other variants show a significant improvement or decline in performance compared to the control.
+
+### Advantages
+This method is straightforward to implement and interpret.It provides a clear comparison between each variant and the control, helping us identify variants that show a clear performance difference.
+
+### Drawbacks
+If there are multiple variants that outperform the control, it doesn't explicitly tell us which of these variants is the best among them. We can't make definitive inferences about the relative performance of variants that beat the control without additional analysis.
+
+## Method 2: Best among All
+
+In this method, we take a different approach by comparing each variant to the maximum performance among the other variants. This method addresses the drawback of the first method by identifying both the best and the worst performers among all variants, providing a more comprehensive understanding of their relative performance.
+
+### Advantages:
+It effectively finds the variant that shows the highest uplift in performance compared to all other variants. It accounts for situations where multiple variants are outperforming the control and helps identify the variant that performs best relative to the others.
+
+### Drawbacks:
+The calculation of relative uplift can be more complex compared to the simple comparison to the control. Depending on the data and distribution, this method might not always provide a clear distinction between the best and the second-best performers.
+
+In summary, both methods have their pros and cons. Method 1 is simpler and provides a direct comparison to the control, which can be useful for initial assessments. Method 2, on the other hand, offers a more comprehensive understanding of relative performance but might require more complex calculations. It's important to consider the trade-offs and make an informed decision based on the insights we want to derive from the analysis.
