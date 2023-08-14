@@ -124,6 +124,7 @@ Below is the simulation of the case when both variants have the same success pro
 
 ![Same_Success_Rate](https://github.com/kkharel/Bayesian-A-B-Testing/assets/59852121/521d4841-56de-4328-9de3-0739b59b7cd0)
 
+
 We can see that for both weak prior and strong prior the true uplift of 0% lies within 95% HDI which suggests the decision that we should not roll out variant B.
 
 Now, below is the simulation of the case when variant B have the higher true success probability than variant A
