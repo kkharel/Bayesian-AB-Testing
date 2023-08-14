@@ -192,6 +192,5 @@ Chris Stucchio. Bayesian a/b testing at vwo. 2015. URL: https://vwo.com/download
 
 John Kruschke. Doing Bayesian data analysis: A tutorial with R, JAGS, and Stan. Academic Press, 2014.
 
-Authors:
-
+Initial Code Authors:
 Cuong Duong, percevalve from pyMC. The initial code provided through pyMC has been modified here to capture relevant use cases and images.
