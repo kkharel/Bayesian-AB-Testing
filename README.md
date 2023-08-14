@@ -111,3 +111,6 @@ Prior predictive checks are conducted using two different prior settings (weak a
 By generating simulated data based on these priors and then analyzing the simulated data, we can gain insights into how the model responds to different prior beliefs and understand the range of outcomes we might expect in the absence of actual observed data. This can help us make informed decisions about the suitability of chosen priors and model structure.
 
 In summary, It's a way to explore the impact of different prior beliefs on our model's predictions before seeing any actual data.
+
+
+![Prior_Predictive_Check](https://github.com/kkharel/Bayesian-A-B-Testing/assets/59852121/816e3cc4-af5f-4a3b-9b08-c242f7df2e90)
