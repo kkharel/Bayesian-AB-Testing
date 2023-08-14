@@ -179,3 +179,19 @@ From the results, it suggests to roll out variant D. If we look at weak prior an
 
 Now, 
 Below is the simulation of a case where we compare all the variants and pick the best among all of them.
+![Best_Among_All](https://github.com/kkharel/Bayesian-A-B-Testing/assets/59852121/ad37f0b2-abdb-4573-94e3-80f7efcc1eae)
+
+
+We can clearly see that variant D outperforms all other variants. All other variants performs worst than variant D. Hence, we should roll out variant D in this case.
+
+This wraps up Bayesian A/B testing method for Proportions
+
+Citations:
+
+Chris Stucchio. Bayesian a/b testing at vwo. 2015. URL: https://vwo.com/downloads/VWO\_SmartStats\_technical\_whitepaper.pdf.
+
+John Kruschke. Doing Bayesian data analysis: A tutorial with R, JAGS, and Stan. Academic Press, 2014.
+
+Authors:
+
+Cuong Duong, percevalve from pyMC. The initial code provided through pyMC has been modified here to capture relevant use cases and images.
