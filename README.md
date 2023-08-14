@@ -1,3 +1,5 @@
+# Bayesian A/B Testing for Proportions with two Variant and n-Variant Use Cases
+
 # Use Case: Two Variant
 
 We want to know whether the new landing page results in more purchase than current landing page.
