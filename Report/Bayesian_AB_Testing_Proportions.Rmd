@@ -1,0 +1,495 @@
+---
+title: "Bayesian A/B Testing - Proportions"
+author: "Kushal Kharel"
+date: "2023-08-12"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+library(reticulate)
+
+```
+
+# Use Case: Two Variant
+
+We want to know whether the new landing page results in more purchase than current landing page.
+
+A - existing landing page.
+B - new page we want to test.
+metric of interest - proportion of users purchasing at least one item --> a bernoulli conversion - User either purchases at least one item(success) or do not purchase an item(failure).
+
+The question we are trying to answer: Is variant B better than variant A?
+
+## Assumptions:
+
+Assume visitors behavior on landing page is independent of other visitors.
+
+Assume we do not know the true success probabilities of each variant but instead they follow beta distribution. 
+
+Assume probabilities are independent (split traffic between each variant randomly,so one variant would not affect the other variant).
+
+Assume observed data (number of users landing on page and puchasing at least one item) follows a Bernoulli distribution.
+
+
+## Metrics:
+
+We look at the relative uplift in success probability to assess whether B is better than A that is, the percent difference in true success probability.
+
+
+## Background: 
+
+Bayes Formula:
+
+P(conversion|data) = P(conversion)*P(data|conversion)/P(data)
+
+where,
+
+Initial Guess (P(conversion)): Start with initial estimate of how often visitors buy something on the website. This is the educated guess based on historical data or assumptions.
+
+Actual Behavior (Likelihood of Data given conversion Rate): Then we see how well our initial estimate matches what's actually happening. We check how often people are really making purchases on the site.
+
+Overall Patterns (Overall Likelihood): We consider how frequently people generally buy things online, regardless of the website. This gives us an idea of what's common on the internet.
+
+Updated Estimate (Posterior Conversion Rate): Finally, we combine all this information to improve the initial estimate. This new estimate takes into account starting guess, the actual behavior of visitors, and the broader patterns of online shopping.
+
+
+## Steps for Bayesian A/B testing:
+
+### Define Prior Distribution: 
+Start with initial assumption about the conversion rates before any data is collected. The prior distribution can be chosen based on domain knowledge, historical data, or it can be non-informative to avoid bias.
+
+### Collect Data: 
+Collect data on the number of conversions and the total number of trials (visitors, clicks, etc.) for each variant.
+
+### Update the Prior with Likelihood: 
+Model the likelihood of observing the data given the assumed conversion rates by using a probability distribution, often the binomial distribution for each variant.
+
+### Calculate Posterior Distribution: 
+Using Bayes theorem, update the prior beliefs with the likelihood calculated from the observed data which results in posterior distribution, representing updated beliefs about the conversion rates for each variant.
+
+### Sample from the Posterior: 
+Sample from posterior distribution using MCMC to get range of possible conversion rates.
+
+### Analyze and Make Decisions: 
+With samples from the posterior distribution, compute various statistics such as mean, median, credible intervals, etc.
+
+### Compare and Choose: 
+Compare the posterior distributions of the conversion rates for variants A and B. We can determine which variant is likely to have a higher conversion rate based on the mean or median of the posterior distributions or by comparing credible intervals.
+
+### Monitor and Iterate: 
+Bayesian A/B testing allows us to continuously update our beliefs as more data becomes available which in turn refines the posterior distribution and the confidence in true conversion rate increases.
+
+## Concepts:
+
+### Highest Density Interval, what is it?:
+Highest Density Interval (HDI), also known as the credible interval, is a way to summarize the uncertainty around a parameter estimate. It provides a range of values within which the true parameter value is likely to fall with a certain level of confidence. The HDI is an interval that contains a specified percentage of the posterior distribution of a parameter. For example, a 95% HDI contains the central 95% of the posterior distribution.
+
+### Interpretation: 
+If we calculate the HDI for a parameter, it means that we can be X% confident that the 
+true parameter value lies within that interval.
+
+### Comparison of Intervals: 
+If we are comparing HDIs of parameters between two (A/B) groups, such as conversion rates for variant A and variant B, and their HDIs do not overlap, it suggests that there's a significant difference between the two groups. If the HDIs overlap, it indicates that the difference between the groups might not be statistically significant.
+
+### Width of HDI: 
+A narrower HDI indicates that we have more precise estimates of the parameter, while a wider HDI indicates greater uncertainty.
+
+### Robustness: 
+HDIs are robust to the shape of the posterior distribution, unlike point estimates (e.g., mean or median), which can be influenced by outliers.
+
+### Reporting: 
+"We are Z% confident that the true conversion rate of variant A/B lies between X% and Y%."
+
+In summary, HDIs in Bayesian A/B testing provide a probabilistic range within which the true parameter value is likely to fall, offering a more comprehensive and informative perspective on uncertainty and inference.
+
+
+## Choosing the Prior?
+
+We are considering the following to choose the prior:
+  
+We assume the same Beta prior is set for each variant initially
+  
+### Weakly informative prior:
+We set low values for alpha and beta meaning we do not know anything about the value of the parameter, nor our confidence around it. We are interested in comparing the relative lift of one variant over another. With a weakly informative Beta prior, the relative uplift distribution is very wide meaning variants could be very different from each other.
+  
+### Strong informative prior:
+We set high values for alpha and beta. The relative uplift distribution is thin meaning our prior belief is that the variants are not very different from each other.
+  
+
+## Prior Predictive Checks:
+
+Prior predictive checks are conducted using two different prior settings (weak and strong priors) to simulate the expected behavior of the model under different assumptions about the conversion rates. 
+
+By generating simulated data based on these priors and then analyzing the simulated data, we can gain insights into how the model responds to different prior beliefs and understand the range of outcomes we might expect in the absence of actual observed data. This can help us make informed decisions about the suitability of chosen priors and model structure.
+
+In summary, It's a way to explore the impact of different prior beliefs on our model's predictions before seeing any actual data.
+
+
+```{python, include=FALSE}
+
+from dataclasses import dataclass
+from typing import Dict, List, Union
+from warnings import simplefilter
+
+import arviz as az
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pymc as pm
+
+from scipy.stats import bernoulli, expon
+
+simplefilter("ignore")
+rng = np.random.default_rng(1000) 
+```
+
+
+
+```{python, echo=FALSE}
+
+@dataclass 
+
+class BetaPrior: 
+  alpha: float
+  beta: float
+
+@dataclass
+
+class BinomialData: 
+  trials: int # represents number of attempts
+  successes: int # represents number of successes out of some number of attempts
+
+class Two_Variant_Model:
+  
+  def __init__(self, priors: BetaPrior):
+    self.priors = priors 
+    
+
+  def create_model(self, data: List[BinomialData]) -> pm.Model: 
+    
+    num_variants = len(data)
+    
+    trials = []
+    successes = []
+
+    for i in data:
+      trials.append(i.trials)
+      successes.append(i.successes)
+
+    with pm.Model() as model: 
+      
+      p = pm.Beta("p", alpha = self.priors.alpha, beta = self.priors.beta, shape = num_variants)
+      
+      obs = pm.Binomial("y", n = trials, p = p, shape = num_variants, observed = successes) 
+      
+      relative_uplift = pm.Deterministic("relative_uplift_B", p[1] / p[0] - 1)  
+      
+    return model
+```
+
+
+```{python}
+weak_prior = Two_Variant_Model(BetaPrior(alpha = 500, beta = 500))
+
+strong_prior = Two_Variant_Model(BetaPrior(alpha = 7000, beta = 7000))
+
+# simulated data with trials = 1 and successes  = 1, check how the model behaves
+with weak_prior.create_model(data=[BinomialData(1, 1), BinomialData(1, 1)]):
+  weak_prior_predictive = pm.sample_prior_predictive(samples=100000, return_inferencedata=False)
+
+with strong_prior.create_model(data=[BinomialData(1, 1), BinomialData(1, 1)]):
+  strong_prior_predictive = pm.sample_prior_predictive(samples=100000, return_inferencedata=False)
+```
+
+
+```{python, echo=FALSE}
+
+az.style.use("arviz-doc")
+fig, axs = plt.subplots(2, 1, figsize=(7, 7), sharex=True)  
+az.plot_posterior(weak_prior_predictive["relative_uplift_B"], ax=axs[0], textsize = 7, color = "green", hdi_prob = 0.95)
+axs[0].set_title(f"Variant B vs. Variant A Relative Uplift Prior Predictive, {weak_prior.priors}", fontsize=7)
+axs[0].set_xlabel("Relative Uplift", fontsize = 7)
+axs[0].set_ylabel("Density", fontsize = 7)
+axs[0].tick_params(axis="both", labelsize=7)  
+axs[0].axvline(x=0, color="orange", linewidth=0.7)
+az.plot_posterior(strong_prior_predictive["relative_uplift_B"], ax=axs[1], textsize = 7, color = "green", hdi_prob = 0.95)
+axs[1].set_title(f"Variant B vs. Variant A Relative Uplift Prior Predictive, {strong_prior.priors}", fontsize=7)
+axs[1].set_xlabel("Relative Uplift", fontsize = 7)
+axs[1].set_ylabel("Density", fontsize = 7)
+axs[1].tick_params(axis="both", labelsize=7)  
+axs[1].axvline(x=0, color="orange", linewidth=0.7)
+
+plt.show()
+```
+
+With 95% HDI for relative uplift for B over A is roughly [-9%, +9%] for weak prior, with strong prior it is roughly [-2.0% +2%]. This will be the starting point for relative uplift distribution and will affect how observed conversion translate to posterior distribution. How we choose the prior depends on the context of the application.A strong prior helps us guard against false discoveries, but may require more data to detect the best variants. A weak prior gives more weight to the observed data but could also lead to more false discovieres as a result of earling stopping.
+
+```{python, echo=FALSE}
+
+def generate_binomial_data(
+  variants: List[str], success_probability: List[str], samples_per_variant: int 
+) -> pd.DataFrame:
+  data = {}
+  for variant, p in zip(variants, success_probability):
+    data[variant] = bernoulli.rvs(p, size = samples_per_variant)
+  agg = (
+    pd.DataFrame(data).aggregate(["count","sum"]).rename(index={"count":"trials", "sum": "successes"})
+  )
+  return agg #, pd.DataFrame(data)
+
+```
+
+We consider two scenarios, one where the true success probability for each variant is the same and the other where Variant B has higher success probability than variant A.
+
+For each variant and its corresponding true sucess probability (p), the model generates random samples using the bernoulli.rvs function from the SciPy library. This function simulates Bernoulli trials based on the success probability, p, and the specified number of samples (samples_per_variant).The generated samples for each variant are stored in the data dictionary.
+
+```{python, echo=FALSE}
+
+def Two_Variant(
+  variants: List[str],
+  success_probability: List[float],
+  samples_per_variant: int,
+  weak_prior: BetaPrior,
+  strong_prior: BetaPrior,
+) -> None:
+  
+  generated = generate_binomial_data(variants, success_probability, samples_per_variant)
+  
+  data = []
+  for i in variants:
+    generated_data = generated[i]
+    data.append(BinomialData(**generated_data.to_dict()))
+
+  
+  print("Generated Data:")
+  print(generated)
+
+  with Two_Variant_Model(priors=weak_prior).create_model(data):
+    trace_weak = pm.sample(draws=11000, tune=1000, cores = 1, chains=4)  # discard first 1000 samples as burn in so that we draw samples from stationary distribution
+    print("\nTrace for Weak Prior:")
+    print(pm.summary(trace_weak))
+    
+  with Two_Variant_Model(priors=strong_prior).create_model(data):
+    trace_strong = pm.sample(draws=11000, tune=1000, cores = 1, chains=4)  
+    print("\nTrace for Strong Prior:")
+    print(pm.summary(trace_strong))
+    
+  true_relative_uplift = success_probability[1] / success_probability[0] - 1
+  print("\nTrue Relative Uplift:")
+  print(true_relative_uplift)
+  
+  fig, axs = plt.subplots(2, 1, figsize=(7, 7), sharex=True)
+  az.plot_posterior(trace_weak.posterior["relative_uplift_B"], ax=axs[0], textsize = 7, color = "green", hdi_prob = 0.95)
+  axs[0].set_title(f"True Relative Uplift = {true_relative_uplift:.1%}, {weak_prior}", fontsize=7)
+  axs[0].axvline(x=0, color="orange")
+  az.plot_posterior(trace_strong.posterior["relative_uplift_B"], ax=axs[1], textsize = 7, color = "green", hdi_prob = 0.95)
+  axs[1].set_title(f"True Relative Uplift = {true_relative_uplift:.1%}, {strong_prior}", fontsize=7)
+  axs[1].axvline(x=0, color="orange")
+  fig.suptitle("Variant B vs. Variant A Relative Uplift", fontsize = 7)
+  plt.show()  
+  return trace_weak, trace_strong
+
+```
+
+
+Below is the simulation of the case when both variants have the same success probabilities
+
+```{python, echo=FALSE}
+
+trace_weak, trace_strong = Two_Variant(
+  variants = ["A", "B"],
+  success_probability = [0.20,0.20],
+  samples_per_variant = 100000,
+  weak_prior = BetaPrior(alpha = 500, beta = 500),
+  strong_prior = BetaPrior(alpha = 7000, beta = 7000),
+)
+```
+
+We can see that for both weak prior and strong prior the true uplift of 0% lies within 95% HDI which suggests the decision that we should not roll out variant B.
+
+Now, below is the simulation of the case when variant B have the higher true success probability than variant A
+
+```{python, echo=FALSE}
+
+trace_weak, trace_strong = Two_Variant(
+  variants = ["A", "B"],
+  success_probability = [0.25, 0.27],
+  samples_per_variant = 100000,
+  weak_prior = BetaPrior(alpha = 500, beta = 500),
+  strong_prior = BetaPrior(alpha = 7000, beta = 7000),
+)
+```
+
+In both weak prior and strong prior case, the posterior relative uplift distribution suggests B
+has a higher conversion rate than A, as the 95% HDI is well above 0. The decision here is to roll out variant B to all users and this outcome is "true discovery".
+
+In practice, we are also interested in how much better is variant B than A?
+
+For the model with strong prior, the prior is effectively pulling the relative uplift distribution closer to zero, so our central estimate of relative uplift is conservative( understated). We would need much more data for our inference to get closer to true relative uplift of 8%
+
+
+
+# Use Case: n-Variant
+
+ WHen we have more than two variants that we want to test simultaneously. We want to determine if any of these variants outperforms the others, 
+ 
+ To achieve this, we explore two different methods
+
+## Method 1: Compare to Control (Variant A)
+
+In this method, we select one variant as the "control" variant which is a reference point. We then compare the performance of the other variants against this control variant, one at a time. The idea is to assess whether any of the other variants show a significant improvement or decline in performance compared to the control.
+
+### Advantages
+This method is straightforward to implement and interpret.It provides a clear comparison between each variant and the control, helping us identify variants that show a clear performance difference.
+
+### Drawbacks
+If there are multiple variants that outperform the control, it doesn't explicitly tell us which of these variants is the best among them. We can't make definitive inferences about the relative performance of variants that beat the control without additional analysis.
+
+## Method 2: Best among All
+
+In this method, we take a different approach by comparing each variant to the maximum performance among the other variants. This method addresses the drawback of the first method by identifying both the best and the worst performers among all variants, providing a more comprehensive understanding of their relative performance.
+
+### Advantages:
+It effectively finds the variant that shows the highest uplift in performance compared to all other variants. It accounts for situations where multiple variants are outperforming the control and helps identify the variant that performs best relative to the others.
+
+### Drawbacks:
+The calculation of relative uplift can be more complex compared to the simple comparison to the control. Depending on the data and distribution, this method might not always provide a clear distinction between the best and the second-best performers.
+
+In summary, both methods have their pros and cons. Method 1 is simpler and provides a direct comparison to the control, which can be useful for initial assessments. Method 2, on the other hand, offers a more comprehensive understanding of relative performance but might require more complex calculations. It's important to consider the trade-offs and make an informed decision based on the insights we want to derive from the analysis.
+
+
+```{python, echo = FALSE}
+@dataclass 
+
+class BetaPrior: 
+  alpha: float
+  beta: float
+
+@dataclass
+
+class BinomialData: 
+  trials: int # represents number of attempts
+  successes: int # represents number of successes out of some number of attempts
+
+class n_variant_Model:
+  def __init__(self, priors: BetaPrior):
+      self.priors = priors
+    
+  def create_model(self, data: List[BinomialData], comparison_method) -> pm.Model:
+      num_variants = len(data)
+      trials = [i.trials for i in data]
+      successes = [i.successes for i in data]
+
+      with pm.Model() as model:
+          p = pm.Beta("p", alpha=self.priors.alpha, beta=self.priors.beta, shape=num_variants)
+          obs = pm.Binomial("y", n=trials, p=p, shape=num_variants, observed=successes)
+
+          reluplift = []
+          for i in range(num_variants):
+              if comparison_method == "compare_to_control":
+                  comparison = p[0]
+              elif comparison_method == "best_among_all":
+                  others = [p[j] for j in range(num_variants) if i != j]
+                  if len(others) > 0:
+                      comparison = others[0]
+                      for j in range(1, len(others)):
+                          comparison = pm.math.maximum(comparison, others[j])
+                  else:
+                      comparison = p[0]
+              else:
+                  raise ValueError(f"Comparison method {comparison_method} is not valid.")
+              reluplift.append(pm.Deterministic(f"reluplift_{i}", p[i] / comparison - 1))
+      return model
+```
+
+
+```{python, echo = FALSE}
+def n_variant(
+  variants: List[str],
+  success_probability: List[float],
+  samples_per_variant: int,
+  weak_prior: BetaPrior,
+  strong_prior: BetaPrior,
+  comparison_method: str,
+):
+  generated = generate_binomial_data(variants, success_probability, samples_per_variant)
+  
+  data = []
+  for i in variants:
+    generated_data = generated[i]
+    data.append(BinomialData(**generated_data.to_dict()))
+
+  print("Generated Data:")
+  print(generated)
+
+  with n_variant_model(priors=weak_prior).create_model(data=data, comparison_method=comparison_method):
+    weak_trace = pm.sample(draws=11000, tune=1000, cores=1, chains=4, init="auto") 
+    print("\nTrace for Weak Prior:")
+    print(pm.summary(weak_trace))
+    
+  with n_variant_model(priors=strong_prior).create_model(data=data, comparison_method=comparison_method):
+    strong_trace = pm.sample(draws=11000, tune=1000, cores=1, chains=4, init="auto")
+    print("\nTrace for Strong Prior:")
+    print(pm.summary(strong_trace))
+    
+  n_plots = len(variants)
+  
+  fig, axs = plt.subplots(nrows=n_plots, ncols=2, figsize=(7, 7), sharex=True)
+
+  for i, variant in enumerate(variants):
+    if i == 0 and comparison_method == "compare_to_control":
+      axs[i, 0].set_yticks([])
+      axs[i, 1].set_yticks([])
+    else:
+      az.plot_posterior(weak_trace.posterior[f"reluplift_{i}"], ax=axs[i, 0], textsize=7, color="green", hdi_prob=0.95)
+      axs[i, 0].set_title(f"Weak Prior: Relative Uplift {variant}, Success rate = {success_probability[i]:.2%}", fontsize=7)
+      axs[i, 0].axvline(x=0, color="orange")
+      
+      az.plot_posterior(strong_trace.posterior[f"reluplift_{i}"], ax=axs[i, 1], textsize=7, color="green", hdi_prob=0.95)
+      axs[i, 1].set_title(f"Strong Prior: Relative Uplift {variant}, Success rate = {success_probability[i]:.2%}", fontsize=7)
+      axs[i, 1].axvline(x=0, color="orange")
+
+  fig.suptitle(f"Method {comparison_method}", fontsize=7)
+  plt.show()  
+
+  return weak_trace, strong_trace
+
+
+```
+
+
+```{python, echo = FALSE}
+
+weak_trace, strong_trace = n_variant(
+    variants=["A", "B", "C", "D"],
+    success_probability=[0.21, 0.23, 0.228, 0.26],
+    samples_per_variant=100000,
+    weak_prior = BetaPrior(alpha = 500, beta = 500),
+    strong_prior = BetaPrior(alpha = 7000, beta = 7000),
+    comparison_method="compare_to_control",
+)
+```
+
+We can see that all the variants are btter than variant A but how do we know that among all
+the variants which one to choose? Suppose for example, if we do not have variant D then how would we choose between variant B and C? Best among all method implemented in the code handles such situations as well.
+
+From the results, it suggests to roll out variant D. If we look at weak prior and strong prior, we see that strong prior understated our central estimate. we need more data for strong prior
+to get closer to true relative uplift of 26%
+
+Now, 
+Below is the simulation of a case where we compare all the variants and pick the best among all of them.
+
+```{python, echo = FALSE}
+weak_trace, strong_trace = n_variant(
+    variants=["A", "B", "C", "D"],
+    success_probability=[0.21, 0.23, 0.228, 0.26],
+    samples_per_variant=100000,
+    weak_prior = BetaPrior(alpha = 500, beta = 500),
+    strong_prior = BetaPrior(alpha = 7000, beta = 7000),
+    comparison_method="best_among_all",
+)
+```
+
+We can clearly see that variant D outperforms all other variants. All other variants performs worst than variant D. Hence, we should roll out variant D in this case.
