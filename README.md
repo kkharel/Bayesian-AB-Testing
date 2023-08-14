@@ -165,3 +165,15 @@ It effectively finds the variant that shows the highest uplift in performance co
 The calculation of relative uplift can be more complex compared to the simple comparison to the control. Depending on the data and distribution, this method might not always provide a clear distinction between the best and the second-best performers.
 
 In summary, both methods have their pros and cons. Method 1 is simpler and provides a direct comparison to the control, which can be useful for initial assessments. Method 2, on the other hand, offers a more comprehensive understanding of relative performance but might require more complex calculations. It's important to consider the trade-offs and make an informed decision based on the insights we want to derive from the analysis.
+
+Below is the simulation of the case when we treat A as control and compare all other variants with A one at a time.
+
+![Compare_to_Control](https://github.com/kkharel/Bayesian-A-B-Testing/assets/59852121/7b0e3532-8e19-411b-bca2-349da012c897)
+
+
+We can see that all the variants are btter than variant A but how do we know that among all the variants which one to choose? Suppose for example, if we do not have variant D then how would we choose between variant B and C? Best among all method implemented in the code handles such situations as well.
+
+From the results, it suggests to roll out variant D. If we look at weak prior and strong prior, we see that strong prior understated our central estimate. we need more data for strong prior to get closer to true relative uplift of 26%
+
+Now, 
+Below is the simulation of a case where we compare all the variants and pick the best among all of them.
