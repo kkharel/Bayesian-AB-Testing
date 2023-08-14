@@ -122,8 +122,17 @@ For each variant and its corresponding true sucess probability (p), the model ge
 
 Below is the simulation of the case when both variants have the same success probabilities
 
-
+![Same_Success_Rate](https://github.com/kkharel/Bayesian-A-B-Testing/assets/59852121/521d4841-56de-4328-9de3-0739b59b7cd0)
 
 We can see that for both weak prior and strong prior the true uplift of 0% lies within 95% HDI which suggests the decision that we should not roll out variant B.
 
 Now, below is the simulation of the case when variant B have the higher true success probability than variant A
+
+![Different_Success_Rate](https://github.com/kkharel/Bayesian-A-B-Testing/assets/59852121/a311f4f4-5bf2-483d-8ea1-eba2a7b454ca)
+
+In both weak prior and strong prior case, the posterior relative uplift distribution suggests B
+has a higher conversion rate than A, as the 95% HDI is well above 0. The decision here is to roll out variant B to all users and this outcome is "true discovery".
+
+In practice, we are also interested in how much better is variant B than A?
+
+For the model with strong prior, the prior is effectively pulling the relative uplift distribution closer to zero, so our central estimate of relative uplift is conservative( understated). We would need much more data for our inference to get closer to true relative uplift of 8%
