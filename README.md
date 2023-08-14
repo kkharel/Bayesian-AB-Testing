@@ -114,3 +114,5 @@ In summary, It's a way to explore the impact of different prior beliefs on our m
 
 
 ![Prior_Predictive_Check](https://github.com/kkharel/Bayesian-A-B-Testing/assets/59852121/816e3cc4-af5f-4a3b-9b08-c242f7df2e90)
+
+With 95% HDI for relative uplift for B over A is roughly [-9%, +9%] for weak prior, with strong prior it is roughly [-2.0% +2%]. This will be the starting point for relative uplift distribution and will affect how observed conversion translate to posterior distribution. How we choose the prior depends on the context of the application.A strong prior helps us guard against false discoveries, but may require more data to detect the best variants. A weak prior gives more weight to the observed data but could also lead to more false discovieres as a result of early stopping.
